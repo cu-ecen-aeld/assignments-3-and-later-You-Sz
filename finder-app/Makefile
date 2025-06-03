@@ -1,3 +1,5 @@
+CROSS_COMPILE :=
+
 # Build target
 TARGET := writer
 
