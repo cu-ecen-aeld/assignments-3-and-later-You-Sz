@@ -1,4 +1,10 @@
 #include "systemcalls.h"
+#include "stdlib.h"
+#include "string.h"
+#include "errno.h"
+#include "unistd.h"
+#include "sys/wait.h"
+#include <fcntl.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -16,8 +22,8 @@ bool do_system(const char *cmd)
  *   and return a boolean true if the system() call completed with success
  *   or false() if it returned a failure
 */
-
-    return true;
+    int result = system(cmd);
+    return result ? false : true;
 }
 
 /**
@@ -47,8 +53,9 @@ bool do_exec(int count, ...)
     command[count] = NULL;
     // this line is to avoid a compile warning before your implementation is complete
     // and may be removed
-    command[count] = command[count];
-
+    // command[count] = command[count];
+	
+    va_end(args);
 /*
  * TODO:
  *   Execute a system command by calling fork, execv(),
@@ -58,8 +65,45 @@ bool do_exec(int count, ...)
  *   as second argument to the execv() command.
  *
 */
+    fflush(stdout);
+    pid_t pid = fork();
+    if(pid < 0)
+    {
+	    // Fork error
+	    printf("fork failed: %s (errno: %d)\n", strerror(errno), errno);
+	    return false;
+    }
+    else if(pid == 0)
+    {
+        // Child process
+        execv(command[0], command);
 
-    va_end(args);
+        printf("execv failed: %s (errno: %d)\n", strerror(errno), errno);
+        _exit(1);
+    }
+    else
+    {
+        // Parent process
+        int status;
+        // Waitpid
+        if(waitpid(pid, &status, 0) == -1)
+        {
+            printf("Wait pid failed: %s (errno: %d)\n", strerror(errno), errno);
+            return false;
+        }
+
+        if(WIFEXITED(status))
+        {
+            // Child exited normally
+            printf("Child exited with status: %d\n", WEXITSTATUS(status));
+            return WEXITSTATUS(status) == 0;
+        }
+        else
+        {
+            // Child exited abnormally
+            printf("Child exited abnormally\n");
+        }
+    }
 
     return true;
 }
@@ -71,6 +115,7 @@ bool do_exec(int count, ...)
 */
 bool do_exec_redirect(const char *outputfile, int count, ...)
 {
+    printf("Outputfile: %s\n", outputfile);
     va_list args;
     va_start(args, count);
     char * command[count+1];
@@ -94,6 +139,65 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
 */
 
     va_end(args);
+
+    fflush(stdout);
+    pid_t pid = fork();
+    if(pid < 0)
+    {
+	    // Fork error
+	    printf("fork failed: %s (errno: %d)\n", strerror(errno), errno);
+	    return false;
+    }
+    else if(pid == 0)
+    {
+        // Child process
+
+        // Open the output file
+        int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if(fd < 0)
+        {
+            printf("Open file failed: %s (errno: %d)\n", strerror(errno), errno);
+            _exit(1);
+        }
+
+        // Redirect stdout to the output file
+        if(dup2(fd, STDOUT_FILENO) < 0)
+        {
+            // Redirect failed
+            printf("Redirect stdout failed: %s (errno: %d)\n", strerror(errno), errno);
+            close(fd);
+            _exit(1);
+        }
+        close(fd);
+
+        execv(command[0], command);
+
+        printf("execv failed: %s (errno: %d)\n", strerror(errno), errno);
+        _exit(1);
+    }
+    else
+    {
+        // Parent process
+        int status;
+        // Waitpid
+        if(waitpid(pid, &status, 0) == -1)
+        {
+            printf("Wait pid failed: %s (errno: %d)\n", strerror(errno), errno);
+            return false;
+        }
+
+        if(WIFEXITED(status))
+        {
+            // Child exited normally
+            printf("Child exited with status: %d\n", WEXITSTATUS(status));
+            return WEXITSTATUS(status) == 0;
+        }
+        else
+        {
+            // Child exited abnormally
+            printf("Child exited abnormally\n");
+        }
+    }
 
     return true;
 }
